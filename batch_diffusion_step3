@@ -1,0 +1,8 @@
+% batch_diffusion_step3
+
+    
+    % Create wm_mask.nii.gz. This is a special mask file that mrtrix_ensemble.sh expects. 
+    s_fe_make_wm_mask_hcp_modified(topdir, subID)
+    
+    % Place wm_mask.nii.gz in the anatomical folder. This is where
+    % mrtrix_ensemble.sh expects to find it.

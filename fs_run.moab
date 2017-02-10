@@ -1,0 +1,24 @@
+#!/bin/bash
+
+#PBS -k o
+#PBS -l nodes=1:ppn=16,walltime=12:00:00
+#PBS -N lwx_sub306
+
+#module load fsl
+module load freesurfer
+
+export SUBJECTS_DIR=/N/dc2/projects/lifebid/development/freesurfer
+source $FREESURFER_HOME/SetUpFreeSurfer.sh
+
+#recon-all -s sub101 -i /N/dc2/projects/lifebid/development/sub101/anatomical/mprage_acpc.nii.gz -all -openmp 16
+#recon-all -s sub103 -i /N/dc2/projects/lifebid/development/sub103/anatomical/mprage_acpc.nii.gz -all -openmp 16
+#recon-all -s sub105 -i /N/dc2/projects/lifebid/development/sub105/anatomical/mprage_acpc.nii.gz -all -openmp 16
+#recon-all -s sub203 -i /N/dc2/projects/lifebid/development/sub203/anatomical/mprage_acpc.nii.gz -all -openmp 16
+#recon-all -s sub204 -i /N/dc2/projects/lifebid/development/sub204/anatomical/mprage_acpc.nii.gz -all -openmp 16
+#recon-all -s sub206 -i /N/dc2/projects/lifebid/development/sub206/anatomical/mprage_acpc.nii.gz -all -openmp 16
+#recon-all -s sub301 -i /N/dc2/projects/lifebid/development/sub301/anatomical/mprage_acpc.nii.gz -all -openmp 16
+#recon-all -s sub302 -i /N/dc2/projects/lifebid/development/sub302/anatomical/mprage_acpc.nii.gz -all -openmp 16
+#recon-all -s sub303 -i /N/dc2/projects/lifebid/development/sub303/anatomical/mprage_acpc.nii.gz -all -openmp 16
+#recon-all -s sub304 -i /N/dc2/projects/lifebid/development/sub304/anatomical/mprage_acpc.nii.gz -all -openmp 16
+recon-all -s sub306 -i /N/dc2/projects/lifebid/development/sub306/anatomical/mprage_acpc.nii.gz -all -openmp 16
+

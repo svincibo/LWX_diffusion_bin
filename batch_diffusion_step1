@@ -1,0 +1,116 @@
+#!/bin/bash
+
+# Before running this script. You must (1) create a folder for each participant that you would like to analyze (e.g., sub105), (2) create a folder called raw within the subject folder, and (3) copy the raw dicom files into the raw folder. To copy over the raw dicom files, on your own computer (not Karst Desktop), change the participant ID accordingly and run this command in terminal:
+
+# scp -r /Volumes/path/to/files/* iuusername@karst.uits.iu.edu:/N/dc2/projects/lifebid/development/sub105/raw
+
+# Note, also, that this script requires (1) the reorgDTI_ap and reorgDTI_pa bash scripts and (2) acq_params.txt text file to be present in /N/dc2/projects/lifebid/development/bin/
+
+# Load mricron for dcm2nii.
+module load mricron
+
+subID='007 009'
+
+for i in $subID; do
+
+subdir="/N/dc2/projects/lifebid/development/sub${i}"
+cd $subdir;
+
+# SET-UP FILE STRUCTURE
+mkdir -p diffusion
+mkdir -p anatomical
+mkdir -p functional
+
+diffdir="${subdir}/diffusion"
+cd $diffdir
+
+mkdir -p AP
+mkdir -p PA
+mkdir -p fibers
+
+# CONVERT DICOM FILES INTO NIFTI FILES.
+dcm2nii -d n -e n "${subdir}/raw"
+
+# MOVE NIFTI FILES TO PROPER LOCATION.
+# diffusion images
+cp "${subdir}/raw/DWIdir80AP.nii.gz" "${diffdir}/dwi_dir80_ap.nii.gz"
+mv "${subdir}/raw/DWIdir80AP.nii.gz" "${diffdir}/AP/dwi_dir80_ap.nii.gz"
+cp "${subdir}/raw/DWIdir1PAB0only.nii.gz" "${diffdir}/dwi_dir1_pa_bo_only.nii.gz"
+mv "${subdir}/raw/DWIdir1PAB0only.nii.gz" "${diffdir}/PA/dwi_dir1_pa_bo_only.nii.gz"
+# bvecs and bvals for AP, [Note: bval/bvec change to bvals/bvecs.]
+cp "${subdir}/raw/DWIdir80AP.bvec"  "${diffdir}/dwi_dir80_ap.bvecs"
+mv "${subdir}/raw/DWIdir80AP.bvec"  "${diffdir}/AP/dwi_dir80_ap.bvecs"
+cp "${subdir}/raw/DWIdir80AP.bval"  "${diffdir}/dwi_dir80_ap.bvals"
+mv "${subdir}/raw/DWIdir80AP.bval"  "${diffdir}/AP/dwi_dir80_ap.bvals"
+# bvecs and bvals for PA, [Note: bval/bvec change to bvals/bvecs.]
+cp "${subdir}/raw/DWIdir1PAB0only.bvec"  "${diffdir}/dwi_dir1_pa_bo_only.bvecs"
+mv "${subdir}/raw/DWIdir1PAB0only.bvec"  "${diffdir}/PA/dwi_dir1_pa_bo_only.bvecs"
+cp "${subdir}/raw/DWIdir1PAB0only.bval"  "${diffdir}/dwi_dir1_pa_bo_only.bvals"
+mv "${subdir}/raw/DWIdir1PAB0only.bval"  "${diffdir}/PA/dwi_dir1_pa_bo_only.bvals"
+
+# MOVE ANATOMICAL TO PROPER LOCATION.
+mv "${subdir}/raw/t1mpragesagp2.nii.gz"  "${subdir}/anatomical/mprage.nii.gz"
+
+# MOVE FUNCTIONAL TO PROPER LOCATION ~ this will have to be done manually for now becaues it depends upon how many of the functionals are actually useable.
+
+# Update the user.
+echo "==========All done converting dicom to nifti and setting up folder directories for participant:=========="
+echo ${i}
+echo "========================================================================================================="
+
+# CD INTO THE PA SUBFOLDER OF THE PARTICIPANT'S DIFFUSION FOLDER
+cd "${diffdir}/PA";
+
+# Apply eddy current correction and motion correction to PA image. The eddy-current-corrected image is saved as rPA.nii.gz.
+eddy_correct dwi_dir1_pa_bo_only.nii.gz rPA 0
+
+# Call reorgDTI to find and average the b0 images in rPA. The average of the b0 images is saved as nodif.nii.gz (see inside reorgDTI). 
+. /N/dc2/projects/lifebid/development/bin/reorgDTI_pa rPA;
+
+# Use fslmaths to take the average nodif across time. The average of nodif across time is saved as PA_nodif_mean.nii.gz.
+fslmaths nodif -Tmean PA_nodif_mean
+
+# Use bet to delete the non-brain tissue from PA_nodif_mean. The skull-stripped, time-averaged, eddy-current-corrected image is saved as nodif_brian.nii.gz.
+bet PA_nodif_mean nodif_brain -f 0.4 -g 0 -m
+
+# CD INTO THE AP SUBFOLDER OF THE PARTICIPANT'S DIFFUSION FOLDER
+cd "${diffdir}/AP";
+
+# Apply eddy current correction and motion correction to AP image. The eddy-current-corrected image is saved as rAP.nii.gz.
+eddy_correct dwi_dir80_ap.nii.gz rAP 0
+
+# Call reorgDTI to find and average the b0 images in rAP. The average of the b0 images is saved as nodif.nii.gz (see inside reorgDTI). 
+. /N/dc2/projects/lifebid/development/bin/reorgDTI_ap rAP;
+
+# Use fslmaths to take the average nodif across time. The average of nodif across time is saved as AP_nodif_mean.nii.gz.
+fslmaths nodif -Tmean AP_nodif_mean
+
+# Use bet to delete the non-brain tissue from AP_nodif_mean. The skull-stripped, time-averaged, eddy-current-corrected image is saved as nodif_brain.nii.gz.
+bet AP_nodif_mean nodif_brain -f 0.4 -g 0 -m
+
+# Update the user.
+echo "==========All done preparing for eddy correction for participant:=========="
+echo ${i}
+echo "==========================================================================="
+
+# CD INTO THE PARTICIPANT'S DIFFUSION FOLDER
+cd "${diffdir}"
+
+# Make a copy of the acq_params.txt within the participant's diffusion folder.
+cp /N/dc2/projects/lifebid/development/bin/acq_params.txt acq_params.txt
+
+# Merge PA_nodif_mean and AP_nodif_mean across time into one image. The merged image is saved as b0_images.nii.gz.
+fslmerge -t b0_images ./PA/PA_nodif_mean ./AP/AP_nodif_mean
+
+# ESTIMATE UNWARPING: Run topup on the b0_images to estimate the susceptibility induced distortions (using acq_params.txt to tell it the orientation of the head). The procedure outputs my_topup_results.nii.gz, my_field.nii.gz, and my_unwarped_images.nii.gz.
+topup --imain=b0_images.nii.gz --datain=acq_params.txt --config=b02b0.cnf --out=my_topup_results --fout=my_field --iout=my_unwarped_images
+
+# APPLY UNWARPING: Apply the estimated susceptibility induced distortions found from topup. Using Jacobian instead of Sum of Least Squares, because SLR can only be applied on pairs of scans. The corrected image is saved as data.nii.gz.
+applytopup --imain=./AP/rAP.nii.gz --datain=acq_params.txt --inindex=2 --topup=my_topup_results --out=data --method=jac
+
+# Update the user.
+echo "==========All done with participant:=========="
+echo ${i}
+echo "=============================================="
+
+done
